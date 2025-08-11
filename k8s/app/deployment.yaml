@@ -15,17 +15,22 @@ spec:
     spec:
       containers:
         - name: go-demo
-          image: denvasyliev/go-demo-app:latest
+          image: docker.io/paranoidlookup/go-demo-app:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: go-demo-config
           readinessProbe:
-            httpGet: { path: "/", port: 8080 }
+            httpGet:
+              path: /
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
-            httpGet: { path: "/", port: 8080 }
+            httpGet:
+              path: /
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
