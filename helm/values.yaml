@@ -1,6 +1,6 @@
 app:
   name: k8sdiy
-  version: v4
+  version: v3
   port: 80
 image:
   name: denvasyliev/k8sdiy
