@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-demo-config
+  namespace: demo
+data:
+  APP_MESSAGE: "MVP v1"
