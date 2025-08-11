@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: go-demo-app
+  namespace: demo
+  annotations:
+    kubernetes.io/ingress.class: ambassador
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api/
+        pathType: Prefix
+        backend:
+          service:
+            name: go-demo-app-api
+            port:
+              number: 80
+      - path: /img/
+        pathType: Prefix
+        backend:
+          service:
+            name: go-demo-app-img
+            port:
+              number: 80
+      - path: /ascii/
+        pathType: Prefix
+        backend:
+          service:
+            name: go-demo-app-ascii
+            port:
+              number: 80
