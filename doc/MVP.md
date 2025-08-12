@@ -2,10 +2,13 @@
 ## Робота демонстраційного застосунку (Argo CD + Ambassador)
 # Внесені зміни
 
-    Оновлення образу Ambassador (gateway)
-    Суть змін: замінено застарілий образ quay.io/datawire/ambassador:0.51.2 на актуальний 1.14.x з Docker Hub.
-    Причина: версія 0.51.2 використовує Docker manifest v1 (prettyjws), який сучасний containerd не підтримує → помилка not implemented: media type .... Версії 1.14.x використовують manifest v2/OCI та працюють коректно.
-    Місце змін: helm/values.yaml
+Оновлення образу Ambassador (gateway)
+# Суть змін:
+замінено застарілий образ quay.io/datawire/ambassador:0.51.2 на актуальний 1.14.x з Docker Hub.
+# Причина:
+версія 0.51.2 використовує Docker manifest v1 (prettyjws), який сучасний containerd не підтримує → помилка not implemented: media type .... Версії 1.14.x використовують manifest v2/OCI та працюють коректно.
+# Місце змін:
+helm/values.yaml
 ```yaml       
 api-gateway:
   image:
@@ -58,11 +61,11 @@ helm/values.yaml
 
 Передбачається, що кластер містить простір імен demo, а ArgoCD Application налаштований на відповідний форк (path: helm, гілка main).
 
-Port-forward до Ambassador (8080 у контейнері):
+### Port-forward до Ambassador (8080 у контейнері):
 ```bash
 kubectl -n demo port-forward deploy/ambassador 8088:8080
 ```
-Перевірка API:
+### Перевірка API:
 ```bash
 curl -s http://localhost:8088/api/ | head -n1
 ```
