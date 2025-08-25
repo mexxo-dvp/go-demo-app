@@ -1,13 +1,3 @@
-# Kubernetes Manifests + Prompt Portfolio
-
-> This repo contains a portfolio of concise prompts (for `kubectl-ai` or any LLM) that generate and analyze Kubernetes YAML for a demo app.  
-> Output policy: **return valid Kubernetes YAML only**, separated by `---` when multiple objects are needed.
-
-> Tooling: [kubectl-ai](https://github.com/GoogleCloudPlatform/kubectl-ai)  
-> Reference: Google’s *Prompt Engineering* whitepaper (Kaggle rehost)
-
-## Table
-
 | NAME | PROMPT | DESCRIPTION | EXAMPLE |
 |---|---|---|---|
 | app.yaml | Generate a Deployment and ClusterIP Service for app `go-demo-app` in namespace `demo`. Image `paranoidlookup/demo-app:v1.0.3`. Expose containerPort 8080; Service port 80 → targetPort 8080. 2 replicas. Add labels `app=go-demo-app`. Return ONLY valid Kubernetes YAML. | Base app + stable service wiring. | [./yaml/app.yaml](./yaml/app.yaml) |
@@ -19,5 +9,3 @@
 | app-multicontainer.yaml | Generate a Deployment `go-demo-app` (ns=`demo`) with two containers: (1) app `paranoidlookup/demo-app:v1.0.3` on 8080; (2) sidecar `nginx:1.27` on 80 → 127.0.0.1:8080 via ConfigMap `nginx.conf`. Add a ClusterIP Service on port 80 to nginx. YAML only. | Sidecar reverse proxy pattern. | [./yaml/app-multicontainer.yaml](./yaml/app-multicontainer.yaml) |
 | app-resources.yaml | Generate a Deployment `go-demo-app` (ns=`demo`) with resource requests/limits: cpu `100m/500m`, memory `128Mi/512Mi`. 2 replicas. YAML only. | Right-sized resources. | [./yaml/app-resources.yaml](./yaml/app-resources.yaml) |
 | app-secret-env.yaml | Generate a Secret `app-secrets` (ns=`demo`) with `stringData: { API_KEY: "changeme", DB_PASSWORD: "changeme" }` and a Deployment `go-demo-app` that reads them via `env.valueFrom.secretKeyRef`. YAML only. | Secrets → env injection. | [./yaml/app-secret-env.yaml](./yaml/app-secret-env.yaml) |
-
----
