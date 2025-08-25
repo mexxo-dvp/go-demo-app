@@ -1,26 +1,71 @@
 apiVersion: v1
-kind: Pod
+kind: ConfigMap
 metadata:
-  name: app-two-containers
+  name: nginx-proxy-conf
+  namespace: demo
+data:
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        location / {
+          proxy_pass http://127.0.0.1:8080;
+          proxy_set_header Host $host;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
 spec:
-  volumes:
-  - name: html
-    emptyDir: {}
-  containers:
-  - name: 1st
-    image: nginx
-    volumeMounts:
-    - name: html
-      mountPath: /usr/share/nginx/html
-  - name: 2nd
-    image: debian
-    volumeMounts:
-    - name: html
-      mountPath: /html
-    command: ["/bin/sh", "-c"]
-    args:
-      - while true; do
-          date >> /html/index.html;
-          sleep 1;
-        done
-
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-proxy-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app: go-demo-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
