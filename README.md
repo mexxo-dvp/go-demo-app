@@ -1,257 +1,382 @@
-# Let's KIK!
+# Kubernetes Manifests + Prompt Portfolio
 
-#
-## Runc and containerazed app
-	mkdir demo
+> This repo contains a portfolio of concise prompts (for `kubectl-ai` or any LLM) that generate and analyze Kubernetes YAML for a demo app.  
+> Output policy: **return valid Kubernetes YAML only**, separated by `---` when multiple objects are needed.
 
-vim Container
-    
-	FROM busybox
-	CMD while true; do { echo -e 'HTTP/1.1 200 OK\n\nVersion: v1.0.0'; }|nc -vlp 8080;done
-	EXPOSE 8080
- #   
-	img build -t denvasyliev/demo:v1.0.0 -f Container .
-	img unpack denvasyliev/demo:v1.0.0
-	runc spec
-	runc run demo
-	vim config.json:
-		terminal false
-		"sh", "-c", "while true; do { echo -e 'HTTP/1.1 200 OK\n\nVersion: v1.0.0'; }|nc -vlp 8080;done"
-		rootfs false
-		"path": "/var/run/netns/runc"
-## Network
-	sudo brctl addbr runc0
-	sudo ip link set runc0 up
-	sudo ip addr add 192.168.10.1/24 dev runc0
-	sudo ip link add name veth-host type veth peer name veth-guest
-	sudo ip link set veth-host up
-	sudo brctl addif runc0 veth-host
-	sudo ip netns add runc
-	sudo ip link set veth-guest netns runc
-	sudo ip netns exec runc ip link set veth-guest name eth1
-	sudo ip netns exec runc ip addr add 192.168.10.101/24 dev eth1
-	sudo ip netns exec runc ip link set eth1 up
-	sudo ip netns exec runc ip route add default via 192.168.10.1
-	
-    runc run demo
-	curl 192.168.10.101:8080
-	img push denvasyliev/demo:v1.0.0
-	check size on dockerhub
+> Tooling: [kubectl-ai](https://github.com/GoogleCloudPlatform/kubectl-ai)  
+> Reference: Google’s *Prompt Engineering* whitepaper (Kaggle rehost)
 
-# K8S DEPLOYMENT
-	k create deploy demo --image denvasyliev/demo:v1.0.0
+## Table
+markdown
+| NAME | PROMPT | DESCRIPTION | EXAMPLE |
+|---|---|---|---|
+| app.yaml | **Generate a Deployment and ClusterIP Service for app `go-demo-app` in namespace `demo`. Image `paranoidlookup/demo-app:v1.0.3`. Expose containerPort 8080; Service port 80 → targetPort 8080. 2 replicas. Add labels `app=go-demo-app`. Return ONLY valid Kubernetes YAML.** | Base app + stable service wiring. | [/yaml/app.yaml](./yaml/app.yaml) |
+| app-livenessProbe.yaml | **Generate a Deployment `go-demo-app` (ns=`demo`) with a `livenessProbe` `httpGet` on path `/healthz`, port 8080, `initialDelaySeconds: 10`, `periodSeconds: 5`, `failureThreshold: 3`. Keep 1 container using `paranoidlookup/demo-app:v1.0.3`. YAML only.** | Adds a robust liveness check. | [/yaml/app-livenessProbe.yaml](./yaml/app-livenessProbe.yaml) |
+| app-readinessProbe.yaml | **Generate a Deployment `go-demo-app` (ns=`demo`) with a `readinessProbe` `httpGet` on `/readyz`, port 8080, `initialDelaySeconds: 5`, `periodSeconds: 5`, `successThreshold: 1`, `failureThreshold: 3`. Image `paranoidlookup/demo-app:v1.0.3`. YAML only.** | Adds a readiness gate for traffic. | [/yaml/app-readinessProbe.yaml](./yaml/app-readinessProbe.yaml) |
+| app-volumeMounts.yaml | **Generate a Deployment `go-demo-app` (ns=`demo`) that mounts a ConfigMap `app-config` to `/etc/app` (readOnly) and an `emptyDir` to `/var/cache/app`. Include the ConfigMap with key `config.yml: "enable=true"`. Image `paranoidlookup/demo-app:v1.0.3`. YAML only.** | Shows config and runtime cache mounts. | [/yaml/app-volumeMounts.yaml](./yaml/app-volumeMounts.yaml) |
+| app-cronjob.yaml | **Generate a CronJob `db-backup` (ns=`demo`) schedule `0 2 * * *` that runs `alpine:3` with `sh -c 'echo backup && date'`. Set `concurrencyPolicy: Forbid`, `successfulJobsHistoryLimit: 3`, `failedJobsHistoryLimit: 1`, `ttlSecondsAfterFinished: 3600`. YAML only.** | Nightly backup-style task. | [/yaml/app-cronjob.yaml](./yaml/app-cronjob.yaml) |
+| app-job.yaml | **Generate a one-off Job `db-migrate` (ns=`demo`) using `alpine:3`, command `sh -c 'echo migrate && exit 0'`, `restartPolicy: Never`, `backoffLimit: 2`. YAML only.** | Simple migration job. | [/yaml/app-job.yaml](./yaml/app-job.yaml) |
+| app-multicontainer.yaml | **Generate a Deployment `go-demo-app` (ns=`demo`) with two containers: (1) app `paranoidlookup/demo-app:v1.0.3` on 8080; (2) sidecar `nginx:1.27` reverse proxy on 80 → 127.0.0.1:8080 using a ConfigMap-provided `nginx.conf`. Add a ClusterIP Service on port 80 to the nginx container. YAML only.** | Sidecar pattern (reverse proxy). | [/yaml/app-multicontainer.yaml](./yaml/app-multicontainer.yaml) |
+| app-resources.yaml | **Generate a Deployment `go-demo-app` (ns=`demo`) with resource requests/limits: cpu `100m/500m`, memory `128Mi/512Mi`. Image `paranoidlookup/demo-app:v1.0.3`. 2 replicas. YAML only.** | Right-size resources. | [/yaml/app-resources.yaml](./yaml/app-resources.yaml) |
+| app-secret-env.yaml | **Generate a Secret `app-secrets` (ns=`demo`) with `stringData: { API_KEY: "changeme", DB_PASSWORD: "changeme" }` and a Deployment `go-demo-app` that reads them via `env.valueFrom.secretKeyRef`. Image `paranoidlookup/demo-app:v1.0.3`. YAML only.** | Secrets → env injection. | [/yaml/app-secret-env.yaml](./yaml/app-secret-env.yaml) |
 
-	k expose deploy demo --port 80 --type LoadBalancer --target-port 8080 
-	k get svc -o wide -w
-	tmux: 
-		alias k=kubectl
-		k get po -lapp -w
+---
 
-	LB=$(k get svc demo -o jsonpath="{..ingress[0].ip}")
-	while true;do curl -s $LB;sleep 0.7;done
-	vim Container
-	#change to v2.0.0
-	img build -t denvasyliev/demo:v2.0.0
-	img push denvasyliev/demo:v2.0.0
+## How to reproduce manifests with `kubectl-ai`
 
-	k set image deployment demo demo=denvasyliev/demo:v2.0.0 --record
-	k rollout history deploy demo
-	k rollout undo deploy demo --to-revision 1
-
-# K8S CANARY
-	k create deploy demo2 --image denvasyliev/demo:v2.0.0
-	k get po --show-labels
-	k get svc -o wide
-
-	k scale deploy demo --replicas 10
-
-	k label po -lapp run=demo
-	k get svc -o wide
-	k patch svc demo --patch '{"spec":{"selector": {"run": "demo"} }}'
-	k get svc -o wide
-
-	k patch svc demo --type json   -p='[{"op": "remove", "path": "/spec/selector/app"}]'
-	k scale deploy demo2 --replicas 5
-	k label po -lapp run=demo --overwrite
-
-	k scale deploy demo --replicas 1
-	k scale deploy demo --replicas 0
-	k scale deploy demo2 --replicas 1
+```bash
+# Example: generate base app.yaml directly
+kubectl ai -p 'Generate a Deployment and ClusterIP Service for app `go-demo-app` in namespace `demo`. Image `paranoidlookup/demo-app:v1.0.3`. Expose containerPort 8080; Service port 80 → targetPort 8080. 2 replicas. Add labels `app=go-demo-app`. Return ONLY valid Kubernetes YAML.' > yaml/app.yaml
+```
 
 
-# API-GATEWAY
-	git clone https://github.com/den-vasyliev/go-demo-app.git
-	cd go-demo-app
-	helm template ./helm --namespace demo --name demo |k apply -f -
-	watch kubectl get po,svc -n demo
+---
 
-	k -n demo patch svc ambassador --patch '{"spec":{"type": "LoadBalancer"}}'
-	DEMOLB=$(k -n demo get svc ambassador -o jsonpath="{..ingress[0].ip}")
-	curl -XPOST --data '{"text":"test"}' $DEMOLB/ascii/
+### `yaml/app.yaml`
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VERSION
+              value: "v1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app: go-demo-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+```
 
-	watch -t -d -n 0.5 curl -s $DEMOLB/api/
-	helm template ./helm --namespace demo --name demo2 --set image.tag=v2 --set app.version=v2 --set api.canary=30|k apply -f -
-
-	wget -O /tmp/g.png https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png
-	curl -F 'image=@/tmp/g.png' $DEMOLB/img/
-
-	helm template ./helm --namespace demo --name demo2 --set image.tag=v2 --set app.version=v2 --set api.canary=80|k apply -f -
-	helm template ./helm --namespace demo --name demo2 --set image.tag=v2 --set app.version=v2 --set api.canary=100|k apply -f -
-
-	helm template ./helm --namespace demo --name demo --set ns.enable=false --set api-gateway.enable=false|k delete -f -
-
-	helm template ./helm --namespace demo --name demo3 --set image.tag=v3 --set app.version=v3 --set api.canary=50 --set api.header=canary|k apply -f -
-
-	watch kubectl get po,svc -n demo
-
-	watch -t -d -n 0.5 curl -s $DEMOLB/api/ -Hx-mode:canary
-	watch -t -d -n 0.5 curl -s $DEMOLB/api/ 
-
-	helm template ./helm --namespace demo --name demo3 --set image.tag=v3 --set app.version=v3 --set api.canary=100 |k apply -f -
-	helm template ./helm --namespace demo --name demo2 --set ns.enable=false --set api-gateway.enable=false|k delete -f -
-
-	watch -t -d -n 0.5 curl -s $DEMOLB/api/ 
-	OPEN_IN_BROWSER $DEMOLB/ml5/
-
-# DEMO APP API
-	curl -XPOST --data '{"text":"test"}' $DEMOLB/ascii/
-	curl -F 'image=@/tmp/g.png' $DEMOLB/img/
-	OPEN_IN_BROWSER $DEMOLB/ml5/
-
-# EFK
-
-	https://github.com/upmc-enterprises/elasticsearch-operator
-
-## HELM packages
-
-	helm repo add es-operator https://raw.githubusercontent.com/upmc-enterprises/elasticsearch-operator/master/charts/
-	helm fetch es-operator/elasticsearch-operator	
-	helm fetch es-operator/elasticsearch	
-
-## Elasticsearch Operator
-
-	k create ns logging	
-
-	helm template --name elasticsearch-operator elasticsearch-operator-0.1.3.tgz --set rbac.enabled=True --namespace logging | k create -n logging -f -	
-
-	k -n logging logs -f	
-	k get po -n logging -w	
-
-## Elasticsearch Cluster
-
-	helm template --name=elasticsearch elasticsearch-0.1.5.tgz \
-	--set clientReplicas=1 \
-	--set masterReplicas=1 \
-	--set dataReplicas=2 \
-	--set dataVolumeSize=10Gi \
-	--set kibana.enabled=True \
-	--set cerebro.enabled=True \
-	--set zones="{europe-west4-b}" \
-	--set storage.type=pd-standard \
-	--set storage.classProvisioner=kubernetes.io/gce-pd \
-	--namespace logging|k -n logging apply -f -
-
-## Access Cluster
-	k port-forward kibana-.... 5601 -n logging
-
-## Fluentbit
-	https://docs.fluentbit.io/manual/installation/kubernetes/
-
-	k create -f https://raw.githubusercontent.com/fluent/fluent-bit-kubernetes-logging/master/fluent-bit-service-account.yaml
-	
-	k create -f https://raw.githubusercontent.com/fluent/fluent-bit-kubernetes-logging/master/fluent-bit-role.yaml
-	
-	k create -f https://raw.githubusercontent.com/fluent/fluent-bit-kubernetes-logging/master/fluent-bit-role-binding.yaml
-
-	k create -f https://raw.githubusercontent.com/fluent/fluent-bit-kubernetes-logging/master/output/elasticsearch/fluent-bit-configmap.yaml
-
-	k create -f https://raw.githubusercontent.com/fluent/fluent-bit-kubernetes-logging/master/output/elasticsearch/fluent-bit-ds.yaml
-
-# ISTIO
-
-	git clone https://github.com/banzaicloud/istio-operator.git -b release-1.0
-	cd istio-operator
-	make deploy
-	kubectl create -n istio-system -f config/samples/istio_v1beta1_istio.yaml
-	k get po -n istio-system -w
-	kubectl label namespace demo istio-injection=enabled
-	wget https://github.com/istio/istio/releases/download/1.0.5/istio-1.0.5-osx.tar.gz -O -|tar zxf - istio-1.0.5/bin/istioctl
-	mv istio-1.0.5/bin/istioctl /usr/bin/istioctl
-	alias i=/usr/bin/istioctl
-	i version
-
-	k get -n istio-system MeshPolicy default
-	cat <<EOF | kubectl apply -f -
-	apiVersion: "networking.istio.io/v1alpha3"
-	kind: "DestinationRule"
-	metadata:
-	  name: "default"
-	  namespace: "default"
-	spec:
-	  host: "*.local"
-	  trafficPolicy:
-	    tls:
-	      mode: ISTIO_MUTUAL
-	EOF
-
-
-	helm template ./helm --namespace demo --name demo \
-	--set app.version=v3 \
-	--set api-gateway.enable=false \
-	|i kube-inject -f - \
-	|k apply -n demo -f -
-
-	k get po -n demo -w
-
-
-# SETUP KNATIVE
-	
-	apt-get install zsh unzip tmux kubectx -y && \
-	sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)" 
-
-	wget https://github.com/cppforlife/knctl/releases/download/v0.1.0/knctl-linux-amd64 -O kn && \
-	chmod +x kn&&cp kn /usr/bin/kn&&ln -s /usr/bin/kn /usr/bin/knctl
-
-	curl -L https://git.io/getLatestIstio | sh -
-	cp istio-1.0.6/bin/istioctl /usr/local/bin
-	rehash
-
-	kn install
-
-### Broken version
-	kn deploy --service k8s-art --image docker.io/denvasyliev/k8s-art:v3.0.1
-	kn curl --service k8s-art
-	http://k8s-art.demo.k8s-diy.xyz
-
-### Worked verison
-	kn deploy --service k8s-art --image docker.io/denvasyliev/k8s-art:v3.0.1-k
-
-	kn curl --service k8s-art
-
-	http://k8s-art.demo.k8s-diy.xyz
-
-	kn pod list --service k8s-art
-	kn revision list --service k8s-art
-	kn logs -f --service k8s-art
-
-	https://github.com/cppforlife/knctl/tree/master/docs/cmd
-
-### local registry
-	git clone https://github.com/triggermesh/knative-local-registry.git
-	cd knative-local-registry
-	k create ns registry
-	k apply -f templates
-
-### docker-hub credentials
-	export KNCTL_NAMESPACE=demo
-	kn basic-auth-secret create -s docker-reg1 --docker-hub --username NAME --password 'PASS'
-	kn service-account create -a serv-acct1 -s docker-reg1
-### source-to-url
-	kn deploy \
-    	--service k8s-art \
-	    --git-url https://github.com/den-vasyliev/go-demo-app \
-	    --git-revision master \
-	    --service-account serv-acct1 \
-	    --image index.docker.io/denvasyliev/k8s-art-k 
-
-
+### yaml/app-livenessProbe.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+```
+### yaml/app-readinessProbe.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+```
+### yaml/app-volumeMounts.yaml
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: demo
+data:
+  config.yml: |
+    enable: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      volumes:
+        - name: cfg
+          configMap:
+            name: app-config
+        - name: cache
+          emptyDir: {}
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: cfg
+              mountPath: /etc/app
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/app
+```
+### yaml/app-cronjob.yaml
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+  namespace: demo
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:3
+              command: ["sh", "-c", "echo backup && date"]
+```
+### yaml/app-job.yaml
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: demo
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: alpine:3
+          command: ["sh", "-c", "echo migrate && exit 0"]
+```
+### yaml/app-multicontainer.yaml
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-proxy-conf
+  namespace: demo
+data:
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        location / {
+          proxy_pass http://127.0.0.1:8080;
+          proxy_set_header Host $host;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-proxy-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app: go-demo-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+```
+### yaml/app-resources.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+```
+### yaml/app-secret-env.yaml
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: demo
+type: Opaque
+stringData:
+  API_KEY: "changeme"
+  DB_PASSWORD: "changeme"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-app
+  namespace: demo
+  labels:
+    app: go-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: API_KEY
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: DB_PASSWORD
+```

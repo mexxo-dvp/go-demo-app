@@ -1,22 +1,29 @@
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: app-livenessprob
+  name: go-demo-app
   namespace: demo
+  labels:
+    app: go-demo-app
 spec:
-  containers:
-    - image: gcr.io/smartcity-gl/demo:v1.0.1
-      name: app
-
-      livenessProbe:
-        httpGet:
-          path: /
-          port: 8000
-        initialDelaySeconds: 5
-        timeoutSeconds: 1
-        periodSeconds: 10
-        failureThreshold: 3
-        
-      ports:
-        - containerPort: 8080
-          name: http
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-demo-app
+  template:
+    metadata:
+      labels:
+        app: go-demo-app
+    spec:
+      containers:
+        - name: app
+          image: paranoidlookup/demo-app:v1.0.3
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
